@@ -293,7 +293,14 @@ class Client(object):
         if not all(map(_re_7bit_ascii.match, args)):
             raise ValueError(args)
 
-        kwargs.update(tx_id=self.tx_id, rq_id=next_rq_id())
+        # Op.WATCH over XenBusConnection always returns rq_id of 0
+        # See http://lists.xen.org/archives/html/xen-devel/2016-02/msg03737
+        if op == Op.WATCH and isinstance(self.router.connection, XenBusConnection):
+            rid = 0 
+        else:
+            rid = next_rq_id()
+
+        kwargs.update(tx_id=self.tx_id, rq_id=rid)
         rvar = self.router.send(Packet(op, b"".join(args), **kwargs))
         packet = rvar.get()
         if packet.op == Op.ERROR:
@@ -605,20 +612,7 @@ class Client(object):
         The monitor shares the router with its parent client. Thus closing
         the client invalidates the monitor. Closing the monitor, on the
         other hand, had no effect on the router state.
-
-        .. note::
-
-           Using :meth:`monitor` over
-           :class:`~pyxs.connection.XenBusConnection` is currently
-           unsupported, because XenBus does not obey XenStore protocol
-           specification. See `xen-devel`_ discussion for details.
-
-            .. _xen-devel: \
-               http://lists.xen.org/archives/html/xen-devel/2016-02/msg03737
         """
-        if isinstance(self.router.connection, XenBusConnection):
-            raise PyXSError("using ``Monitor`` over XenBus is not supported",
-                            UserWarning)
 
         return Monitor(copy.copy(self))
 
